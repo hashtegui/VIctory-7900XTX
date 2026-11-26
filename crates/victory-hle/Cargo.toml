@@ -45,6 +45,7 @@ windows = { workspace = true, optional = true, features = [
 ] }
 # `#[implement]` names it.
 windows-core = { workspace = true, optional = true }
+gilrs = "0.11.2"
 
 [dev-dependencies]
 tempfile.workspace = true

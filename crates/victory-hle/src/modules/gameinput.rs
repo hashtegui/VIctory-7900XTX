@@ -854,7 +854,10 @@ extern "system" fn unregister_callback(this: This, token: u64, timeout: u64) -> 
             return true;
         }
         state = match deadline {
-            None => hub.returned.wait(state).unwrap_or_else(PoisonError::into_inner),
+            None => hub
+                .returned
+                .wait(state)
+                .unwrap_or_else(PoisonError::into_inner),
             Some(deadline) => {
                 let Some(left) = deadline.checked_duration_since(Instant::now()) else {
                     return false;
@@ -1136,6 +1139,7 @@ mod host {
     };
 
     use super::*;
+    use gilrs::{Axis, Button, Gamepad, Gilrs};
 
     /// Asking XInput about an empty slot is slow; look again this often.
     const EMPTY_SLOT_RECHECK: Duration = Duration::from_secs(1);
@@ -1157,6 +1161,45 @@ mod host {
         (XINPUT_GAMEPAD_RIGHT_THUMB, RIGHT_STICK),
     ];
 
+    /// Generic HID controllers exposed by Windows Gaming Input, such as a
+    /// Bluetooth DualShock 4, are presented as an extra host pad when XInput
+    /// does not expose them. `VICTORY_ONE_PAD` merges it with the keyboard and
+    /// XInput pads, so the title sees the same controller whether it arrives as
+    /// XInput or through WGI's `RawGameController`.
+    const GENERIC_SLOT: usize = 3;
+    const GENERIC_BUTTONS: [(Button, u32); 14] = [
+        (Button::Start, MENU),
+        (Button::Select, VIEW),
+        (Button::South, A),
+        (Button::East, B),
+        (Button::West, X),
+        (Button::North, Y),
+        (Button::DPadUp, UP),
+        (Button::DPadDown, DOWN),
+        (Button::DPadLeft, LEFT),
+        (Button::DPadRight, RIGHT),
+        (Button::LeftTrigger, LEFT_SHOULDER),
+        (Button::RightTrigger, RIGHT_SHOULDER),
+        (Button::LeftThumb, LEFT_STICK),
+        (Button::RightThumb, RIGHT_STICK),
+    ];
+
+    fn generic_pad(pad: &Gamepad<'_>) -> PadState {
+        let trigger = |axis| pad.value(axis).clamp(0.0, 1.0);
+        PadState {
+            buttons: GENERIC_BUTTONS
+                .iter()
+                .filter(|(button, _)| pad.is_pressed(*button))
+                .fold(0, |all, (_, bit)| all | bit),
+            left_trigger: trigger(Axis::LeftZ),
+            right_trigger: trigger(Axis::RightZ),
+            left_x: pad.value(Axis::LeftStickX).clamp(-1.0, 1.0),
+            left_y: pad.value(Axis::LeftStickY).clamp(-1.0, 1.0),
+            right_x: pad.value(Axis::RightStickX).clamp(-1.0, 1.0),
+            right_y: pad.value(Axis::RightStickY).clamp(-1.0, 1.0),
+        }
+    }
+
     /// Raw values, no dead zone: titles apply their own.
     pub(super) fn convert(pad: &XINPUT_GAMEPAD) -> PadState {
         let stick = |v: i16| (f32::from(v) / 32767.0).max(-1.0);
@@ -1174,21 +1217,57 @@ mod host {
         }
     }
 
-    #[derive(Default)]
     pub(super) struct Host {
         empty_until: [Option<Instant>; PADS],
+        generic: Option<Gilrs>,
+    }
+
+    impl Default for Host {
+        fn default() -> Self {
+            let generic = match Gilrs::new() {
+                Ok(gilrs) => Some(gilrs),
+                Err(error) => {
+                    tracing::warn!(%error, "generic HID gamepads are unavailable");
+                    None
+                }
+            };
+            Self {
+                empty_until: Default::default(),
+                generic,
+            }
+        }
+    }
+
+    impl Host {
+        fn generic_pad(&mut self) -> Option<PadState> {
+            let gilrs = self.generic.as_mut()?;
+            // Gilrs keeps its device state up to date through the event queue.
+            while gilrs.next_event().is_some() {}
+            let id = gilrs
+                .gamepads()
+                .find_map(|(id, pad)| pad.is_connected().then_some(id))?;
+            Some(generic_pad(&gilrs.gamepad(id)))
+        }
     }
 
     impl Source for Host {
         fn pad(&mut self, slot: usize) -> Option<PadState> {
             if self.empty_until[slot].is_some_and(|until| Instant::now() < until) {
-                return None;
+                return if slot == GENERIC_SLOT {
+                    self.generic_pad()
+                } else {
+                    None
+                };
             }
             let mut state = XINPUT_STATE::default();
             // SAFETY: room for the state.
             if unsafe { XInputGetState(slot as u32, &mut state) } != 0 {
                 self.empty_until[slot] = Some(Instant::now() + EMPTY_SLOT_RECHECK);
-                return None;
+                return if slot == GENERIC_SLOT {
+                    self.generic_pad()
+                } else {
+                    None
+                };
             }
             self.empty_until[slot] = None;
             #[allow(unused_mut)]
@@ -1200,7 +1279,9 @@ mod host {
             #[cfg(feature = "diagnostics")]
             if slot == 0 {
                 for vk in scripted() {
-                    if let Some(&(_, button)) = super::FALLBACK_BUTTONS.iter().find(|(key, _)| *key == vk) {
+                    if let Some(&(_, button)) =
+                        super::FALLBACK_BUTTONS.iter().find(|(key, _)| *key == vk)
+                    {
                         pad.buttons |= button;
                     }
                 }
@@ -1327,6 +1408,7 @@ mod tests {
     use super::*;
     use crate::HleResolver;
     use crate::HostPolicy;
+    use gilrs::{Axis, Button, Gamepad, Gilrs};
     use victory_loader::Provenance;
     use victory_pe::ImportSymbol;
 
@@ -1592,7 +1674,11 @@ mod tests {
         assert_eq!(pad(hub).left_x, 1.0);
         // A pad is switched on, in any slot: its input arrives, beside the
         // keyboard's, and no device comes or goes.
-        host.lock().unwrap().pads[2] = Some(PadState { buttons: A, left_y: -0.5, ..Default::default() });
+        host.lock().unwrap().pads[2] = Some(PadState {
+            buttons: A,
+            left_y: -0.5,
+            ..Default::default()
+        });
         hub.poll();
         let p = pad(hub);
         assert_eq!((p.buttons, p.left_x, p.left_y), (A, 1.0, -0.5));
@@ -1663,7 +1749,16 @@ mod tests {
         let mut token = 0;
         let context = (&raw const hub.object).cast_mut().cast();
         assert_eq!(
-            register(&hub.object, std::ptr::null(), GAMEPAD_KIND, 1, 0, context, Some(slow), &mut token),
+            register(
+                &hub.object,
+                std::ptr::null(),
+                GAMEPAD_KIND,
+                1,
+                0,
+                context,
+                Some(slow),
+                &mut token
+            ),
             S_OK
         );
         host.lock().unwrap().pads[1] = Some(PadState::default());
@@ -1672,7 +1767,10 @@ mod tests {
             std::thread::sleep(Duration::from_millis(1));
         }
         let unregister = slot::<extern "system" fn(This, u64, u64) -> bool, _>(&hub.object, 0x68);
-        assert!(!unregister(&hub.object, token, 5000), "times out while it runs");
+        assert!(
+            !unregister(&hub.object, token, 5000),
+            "times out while it runs"
+        );
         let leave = std::thread::spawn(|| {
             std::thread::sleep(Duration::from_millis(50));
             LEAVE.store(true, Ordering::SeqCst);
