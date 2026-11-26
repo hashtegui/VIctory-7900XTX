@@ -132,7 +132,7 @@ for ($attempt = 1; $attempt -le ($MaxRestarts + 1); $attempt++) {
     $beforeIds = @(Get-Process victory -ErrorAction SilentlyContinue | ForEach-Object Id)
     $startUtc = (Get-Date).ToUniversalTime()
     $args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $launcher, '-Exe', $gameExe, '-Build', $Build) + @($PlayArgs)
-    if ($Build -eq 'diag') { $args += @('-FrameLog', '-GpuTiming') }
+    if ($Build -eq 'diag') { $args += @('-FrameLog', '-GpuTiming', '-LogTarget', 'victory_gpu=info,victory_loader=info') }
     if ($Capture -and $Build -eq 'diag') { $args += @('-CaptureDir', $captureDir, '-CaptureWorld', '-CaptureEvery', "$CaptureEvery") }
     $process = Start-Process -FilePath 'powershell.exe' -ArgumentList $args -WorkingDirectory $repo -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
 
@@ -224,6 +224,33 @@ foreach ($attemptDir in $attemptDirs) {
     $csv = Join-Path $attemptDir.FullName 'samples.csv'
     if (Test-Path -LiteralPath $csv) { $rows += @(Import-Csv -LiteralPath $csv) }
 }
+$detailRows = @()
+foreach ($attemptDir in $attemptDirs) {
+    $log = Join-Path $attemptDir.FullName 'stderr.log'
+    if (-not (Test-Path -LiteralPath $log)) { continue }
+    $text = Get-Content -LiteralPath $log -Raw
+    foreach ($line in ($text -split "`r?`n")) {
+        $m = [regex]::Match($line, '(?<fps>\d+(?:[.,]\d+)?) fps, (?<frame>\d+(?:[.,]\d+)?) ms/frame \((?<prep>\d+(?:[.,]\d+)?) preparing: copies (?<copyms>\d+(?:[.,]\d+)?) ms\s+(?<copymb>\d+(?:[.,]\d+)?) MB.*textures (?<texms>\d+(?:[.,]\d+)?) ms\s+(?<texmb>\d+(?:[.,]\d+)?) MB; (?<gpu>\d+(?:[.,]\d+)?) on the GPU; (?<backms>\d+(?:[.,]\d+)?) copying back\s+(?<backmb>\d+(?:[.,]\d+)?) MB\), (?<draws>\d+) draws/frame')
+        if ($m.Success) {
+            $detailRows += [pscustomobject]@{
+                attempt = $attemptDir.Name
+                fps = ToNumber $m.Groups['fps'].Value
+                frameMs = ToNumber $m.Groups['frame'].Value
+                preparingMs = ToNumber $m.Groups['prep'].Value
+                copyMs = ToNumber $m.Groups['copyms'].Value
+                copyMb = ToNumber $m.Groups['copymb'].Value
+                textureMs = ToNumber $m.Groups['texms'].Value
+                textureMb = ToNumber $m.Groups['texmb'].Value
+                gpuMs = ToNumber $m.Groups['gpu'].Value
+                copyBackMs = ToNumber $m.Groups['backms'].Value
+                copyBackMb = ToNumber $m.Groups['backmb'].Value
+                draws = ToNumber $m.Groups['draws'].Value
+            }
+        }
+    }
+}
+$details = @($detailRows | Where-Object { $_.draws -ge 500 })
+$detailNumber = { param($Name) @($details | ForEach-Object { [double]$_.$Name }) }
 $world = @($rows | Where-Object { $null -ne (ToNumber $_.fps) -and (ToNumber $_.draws) -ge 500 })
 $fpsValues = @($world | ForEach-Object { ToNumber $_.fps })
 $msValues = @($world | ForEach-Object { ToNumber $_.frameMs })
@@ -242,6 +269,15 @@ $summary = [ordered]@{
     privateMaxMiB = if ($privateValues.Count) { ($privateValues | Measure-Object -Maximum).Maximum } else { $null }
     dedicatedVramMaxMiB = if ($dedicatedValues.Count) { ($dedicatedValues | Measure-Object -Maximum).Maximum } else { $null }
     sharedVramMaxMiB = if ($sharedValues.Count) { ($sharedValues | Measure-Object -Maximum).Maximum } else { $null }
+    frameLogSamples = $details.Count
+    preparingMedianMs = Median (& $detailNumber preparingMs)
+    copyMedianMs = Median (& $detailNumber copyMs)
+    copyMedianMb = Median (& $detailNumber copyMb)
+    textureMedianMs = Median (& $detailNumber textureMs)
+    textureMedianMb = Median (& $detailNumber textureMb)
+    gpuMedianMs = Median (& $detailNumber gpuMs)
+    copyBackMedianMs = Median (& $detailNumber copyBackMs)
+    copyBackMedianMb = Median (& $detailNumber copyBackMb)
     stalledSamples = @($rows | Where-Object { $_.stalledOver2s -eq '1' }).Count
     deviceLoss = [bool](@($allAttempts | Where-Object deviceLoss).Count)
     tdr = [bool](@($allAttempts | Where-Object tdr).Count)
@@ -271,6 +307,12 @@ $md = @"
 | Private RAM max | $($summary.privateMaxMiB) MiB |
 | Dedicated VRAM max | $($summary.dedicatedVramMaxMiB) MiB |
 | Shared VRAM max | $($summary.sharedVramMaxMiB) MiB |
+| Frame-log samples | $($summary.frameLogSamples) |
+| Prepare/submit median | $($summary.preparingMedianMs) ms |
+| Copies median | $($summary.copyMedianMs) ms / $($summary.copyMedianMb) MB |
+| Textures median | $($summary.textureMedianMs) ms / $($summary.textureMedianMb) MB |
+| GPU median | $($summary.gpuMedianMs) ms |
+| Copy-back median | $($summary.copyBackMedianMs) ms / $($summary.copyBackMedianMb) MB |
 | Samples stalled >2 s | $($summary.stalledSamples) |
 | Device loss | $($summary.deviceLoss) |
 | TDR/display event | $($summary.tdr) |
