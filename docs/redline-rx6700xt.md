@@ -167,3 +167,42 @@ still being measured and is not claimed yet.
 - `-FastLoad` for the DirectStorage staging experiment.
 
 The current Release session is the first validation of this exact script.
+## Final A/B results and selected profile
+
+Further runs after the first Redline result:
+
+| Candidate | Steady result | Decision |
+|---|---|---|
+| Redline, 6/6/4 workers | 10–11 fps, 92–104 ms | baseline |
+| Redline + 4/4/2 workers | 11–12 fps, ~84–91 ms | selected |
+| LowCopy alone | 9–10 fps, ~95–105 ms; lower private memory | optional memory profile |
+| LowCopy + 4/4/2 workers | 10–11 fps, 91–103 ms | not selected |
+| Relay 2 | 1–8 fps, much longer frames | rejected |
+| Upload ahead | 9–10 fps, no steady gain | rejected |
+| Port constants + CBV | 0.2–4.6 fps and multi-second copies | rejected |
+
+The selected profile uses:
+
+- output 1920x1080; title upscaler; internal render scale 0.5;
+- relay 1; `VICTORY_BURY_LAG=0`; `VICTORY_CARD_STEPS=0`;
+- texture no-wait and upload-ahead off;
+- four list-translation workers, four joined parts, two mapping workers;
+- ray tracing and all frame generation off.
+
+The current recommended launch is:
+
+```powershell
+scripts\play-rx6700xt.ps1 -Exe <game.exe> -Build release -FastLoad
+```
+
+`-FastLoad` raises DirectStorage staging to 256 MiB. It is exposed as an
+isolated switch; a load-time gain has not yet been isolated from the time spent
+at the player-selection prompt, so it is not claimed as measured.
+
+Expected result on this machine in the tested dense city scene is 11–12 fps and
+roughly 84–96 ms per frame. This is about three times the original 3–4 fps
+baseline, but remains below the 20 fps target. The measured remaining wall is
+CPU-side preparation and title-memory copies, not frame generation or raw GPU
+raster throughput.
+
+The final Release session was left running for physical-controller testing.
