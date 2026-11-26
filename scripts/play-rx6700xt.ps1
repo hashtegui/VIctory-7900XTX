@@ -23,6 +23,9 @@ if ($physicalCores -lt 1) { $physicalCores = [Math]::Max(1, [Math]::Floor($logic
 $translateThreads = [Math]::Max(2, [Math]::Min(6, $physicalCores))
 $joinParts = [Math]::Max(2, [Math]::Min(6, $physicalCores))
 $mappingThreads = [Math]::Max(1, [Math]::Min(4, $physicalCores - 1))
+$leanTranslateThreads = [Math]::Max(2, [Math]::Min(4, $physicalCores - 2))
+$leanJoinParts = [Math]::Max(2, [Math]::Min(4, $physicalCores - 2))
+$leanMappingThreads = [Math]::Max(1, [Math]::Min(2, $physicalCores - 2))
 
 $settings = @{
     # RX 6700 XT is RDNA 2. Reports in the fork's issues #11, #46 and #51 find
@@ -54,8 +57,9 @@ if ($Safe) {
     $settings.VICTORY_RELAY = '1'
     $settings.VICTORY_OUTPUT = '1920x1080'; $settings.VICTORY_RENDER_SCALE = '0.5'; $settings.VICTORY_UPSCALER = '6'
     $settings.VICTORY_DSTORAGE_STAGING_MB = '256'
-    $settings.VICTORY_THIN = '1'; $settings.VICTORY_JOIN_PARTS = "$joinParts"
-    $settings.VICTORY_UPLOAD_AHEAD = '0'; $settings.VICTORY_MAP_THREADS = "$mappingThreads"
+    $settings.VICTORY_THIN = '1'; $settings.VICTORY_JOIN_PARTS = "$leanJoinParts"
+    $settings.VICTORY_THIN_THREADS = "$leanTranslateThreads"
+    $settings.VICTORY_UPLOAD_AHEAD = '0'; $settings.VICTORY_MAP_THREADS = "$leanMappingThreads"
     $profile = 'redline'
 }
 if ($ExperimentalFast) {
@@ -88,6 +92,6 @@ $paths = 'VICTORY_CONFIG', 'VICTORY_GAME_DIR', 'VICTORY_CACHE_DIR', 'VICTORY_DAT
 Get-ChildItem Env:VICTORY_* | Where-Object { $_.Name -notin $paths } | ForEach-Object { Remove-Item "Env:$($_.Name)" }
 foreach ($key in $settings.Keys) { Set-Item "Env:$key" $settings[$key] }
 $Exe = (Resolve-Path -LiteralPath $Exe).Path
-Write-Host "RX 6700 XT profile=$profile physicalCores=$physicalCores logicalCpus=$logicalCpus translateThreads=$translateThreads joinParts=$joinParts mappingThreads=$mappingThreads"
+Write-Host "RX 6700 XT profile=$profile physicalCores=$physicalCores logicalCpus=$logicalCpus translateThreads=$($settings['VICTORY_THIN_THREADS']) joinParts=$($settings['VICTORY_JOIN_PARTS']) mappingThreads=$($settings['VICTORY_MAP_THREADS'])"
 Push-Location (Join-Path $PSScriptRoot '..')
 try { & $victory run $Exe --execute } finally { Pop-Location }
