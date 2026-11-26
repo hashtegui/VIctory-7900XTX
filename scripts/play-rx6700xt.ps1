@@ -11,6 +11,7 @@ param(
     [switch]$ExperimentalFast,
     [switch]$FastLoad,
     [switch]$LowCopy,
+    [switch]$Bar,
     [switch]$LeanThreads,
     [ValidateSet('diag', 'release')][string]$Build = 'diag',
     [hashtable]$More = @{}
@@ -69,6 +70,11 @@ if ($ExperimentalFast) {
     $profile = 'experimental-fast'
 }
 if ($FastLoad) { $settings.VICTORY_DSTORAGE_STAGING_MB = '256' }
+if ($Bar) {
+    # Candidate: move large windows and send buffers to the card through BAR.
+    $settings.VICTORY_WINDOWS_BAR_MB = '3072'
+    $settings.VICTORY_SEND_BAR = '1'
+}
 if ($LowCopy) {
     # Try moving buffers down to 64 KiB onto the card before the 512 MiB cap;
     # candidate only until the reduced PCIe traffic is measured.
