@@ -219,8 +219,10 @@ for ($attempt = 1; $attempt -le ($MaxRestarts + 1); $attempt++) {
 }
 
 $rows = @()
-foreach ($csv in @(Get-ChildItem -Path (Join-Path $runDir 'attempt-*') -Filter 'samples.csv' -File -ErrorAction SilentlyContinue)) {
-    $rows += @(Import-Csv -LiteralPath $csv.FullName)
+$attemptDirs = @(Get-ChildItem -LiteralPath $runDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'attempt-*' })
+foreach ($attemptDir in $attemptDirs) {
+    $csv = Join-Path $attemptDir.FullName 'samples.csv'
+    if (Test-Path -LiteralPath $csv) { $rows += @(Import-Csv -LiteralPath $csv) }
 }
 $world = @($rows | Where-Object { $null -ne (ToNumber $_.fps) -and (ToNumber $_.draws) -ge 500 })
 $fpsValues = @($world | ForEach-Object { ToNumber $_.fps })
