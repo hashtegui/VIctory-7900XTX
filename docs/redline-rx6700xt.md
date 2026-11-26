@@ -276,3 +276,46 @@ at roughly 19-36%, and copy at about 1%. This makes the low frame rate a real
 scene cost on this PC. The upstream guard/journal fixes target CPU-side waits,
 so they may not recover all of the compute-bound frames; they still form the
 next low-risk A/B because both are isolated switches.
+
+## Latest public notes applied locally (2026-11-26T16:18:31Z)
+
+PortWatch refreshed its JSON data at 16:18 UTC. The public scoreboard moved to:
+
+| Score | Project | Reported GPU / FPS | Local decision |
+|---|---:|---|---|
+| 89.6% | CGBJ | unknown / 25 fps | Repository still unavailable; no code admitted |
+| 87.1% | NotNozy | AMD / 16 fps | Private build; no code to inspect |
+| 84.8% | darkworldhm | NVIDIA / 15 fps | No public source on the tracker |
+| 82.1% | Doomsday | AMD + NVIDIA / 4 fps | Lower measured FPS than this profile |
+| 81.8% | `avatarmanz/VIctory-7900XTX` | AMD / 16 fps | Code remains at `c9c932c`; only the README advanced to `2de9980` |
+| 77.4% | `DexNom/VIctory` | AMD / 3 fps | No new performance commit in this refresh |
+| 77.2% | `Belobug/VIctory-Belobug-AMD` | AMD / 8 fps | No new AMD performance commit in this refresh |
+| 68.8% | `stellarr-studio/kelvaroq` | NVIDIA / 10 fps | Repository moved from `fablinoo`; its process-copy patch was admitted and tested here |
+
+Kelvaroq's latest public notes report that its process-copy patch cut heavy-frame
+time by 7-12% above 5,000 draws and removed one-second spikes. Its wide GPU hash
+and 12 GB class card-buffer defaults were already present in this AvatarManz
+tree, so only the missing copy path was ported.
+
+### In-process title-memory copy
+
+The branch `rx6700xt-kelvaroq-opt` now includes `plaincopy.rs` from Kelvaroq's
+patch 0044. Reads into host memory first use the processor copy path; a title
+page fault falls back to the same range through `ReadProcessMemory`. Reads under
+256 bytes and recently faulted 64 KiB blocks stay on the kernel path. Title
+destinations continue to use the kernel path.
+
+`VICTORY_COPY_PLAIN=0` restores the previous behavior. The launcher exposes this
+comparison as `-KernelCopy`; the fast process-copy path is the default.
+
+Validation on this checkout:
+
+- `cargo test -p victory-gpu plaincopy::x64::tests --lib`: 5 passed;
+- `cargo check -p victory --features diagnostics`: passed;
+- tests cover missing interior pages, guarded aliases, one-shot Windows guards,
+  small-read fallback and cooldown after a fault.
+
+This changes title-memory reads, not the game data, save, resolution or control
+mapping. The next game run must still establish the RX 6700 XT frame-time delta;
+the 7-12% figure remains Kelvaroq's measurement on its own NVIDIA test machine
+until reproduced here.
