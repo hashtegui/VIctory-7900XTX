@@ -56,7 +56,6 @@ if ($Safe) {
     # of the pixel cost without frame generation.
     $settings.VICTORY_RELAY = '1'
     $settings.VICTORY_OUTPUT = '1920x1080'; $settings.VICTORY_RENDER_SCALE = '0.5'; $settings.VICTORY_UPSCALER = '6'
-    $settings.VICTORY_DSTORAGE_STAGING_MB = '256'
     $settings.VICTORY_THIN = '1'; $settings.VICTORY_JOIN_PARTS = "$leanJoinParts"
     $settings.VICTORY_THIN_THREADS = "$leanTranslateThreads"
     $settings.VICTORY_UPLOAD_AHEAD = '0'; $settings.VICTORY_MAP_THREADS = "$leanMappingThreads"
