@@ -347,3 +347,35 @@ the launcher now records `VICTORY_COPY_PLAIN=1` explicitly. `-KernelCopy` sets i
 to `0` for the next controlled A/B. `-SeriesS` is also available for the
 upstream-measured, approximately 5 ms lighter console profile; it has not been
 claimed as a local gain until it is run here.
+
+## Series S, short hash and native-720 A/B (2026-11-26)
+
+All runs kept the process-copy path, Relay 1, BAR, renderer ports 6/7,
+4/4/2 workers, 720p internal rendering and no frame generation.
+
+| Profile | Typical heavy view | Memory | Result |
+|---|---|---|---|
+| Series X + 720p -> 1080p | 6-10 fps, 99-180 ms | ~22.5 GiB private | baseline after process copies |
+| Series S + 720p -> 1080p | 9-11 fps, 94-115 ms | ~20.6 GiB private | selected |
+| Light Series S view | 20-25 fps | ~20.5 GiB private | consistent with a real draw-count drop |
+| Series S + short card hash | 6-11 fps, 93-172 ms | ~20.0 GiB private | no consistent gain; remains opt-in |
+| Native 1280x720, upscaler omitted | failed before gameplay | n/a | rejected |
+
+The selected Series S run loaded the same save, held 9-11 fps at 7.2-10.1k
+draws, and exited after about six minutes without an Application Error, WER,
+AMD display event or new VIctory crash record. The GPU compute engine remained
+at about 98-99%, so the gain comes from less work in the Series S render path,
+not from lowering resolution.
+
+`VICTORY_CARD_HASH_LEN=1` did not produce a repeatable gain in the sampled
+views. It is exposed as `-ShortHash` for further tests but is not selected.
+
+The native-720 test was invalid on this build. The logs reported
+`FSR_API_DEBUG_ERROR: Shipping FSR4 configuration mismatch: maxUpscaleSize
+must be 1920x1080; received 1280x720`, followed by an unhandled divide-by-zero
+at `0xc0000094`. The broken `-Native720` launcher path was removed. The title's
+fixed FSR4 tables require the 1920x1080 output target, so internal 720p must
+remain the 720-to-1080 upscale path.
+
+The Redline launcher now defaults to Series S. `-SeriesX` selects the previous
+profile for A/B tests; `-SeriesS` remains accepted for compatibility.
