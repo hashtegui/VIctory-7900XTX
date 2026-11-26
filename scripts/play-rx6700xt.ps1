@@ -52,8 +52,8 @@ if ($Safe) {
     $profile = 'stable'
 } else {
     # Measured Redline profile on the RX 6700 XT: relay 1 with retirement lag
-    # zero stayed up, while 1080p output and a 0.5 internal scale removed most
-    # of the pixel cost without frame generation.
+    # zero stayed up, while 1080p output and a 720p internal scale remove most
+    # of the pixel cost without frame generation or going below the requested 720p floor.
     $settings.VICTORY_RELAY = '1'
     $settings.VICTORY_OUTPUT = '1920x1080'; $settings.VICTORY_RENDER_SCALE = '0.5'; $settings.VICTORY_UPSCALER = '6'
     $settings.VICTORY_THIN = '1'; $settings.VICTORY_JOIN_PARTS = "$leanJoinParts"

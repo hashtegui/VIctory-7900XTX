@@ -206,3 +206,10 @@ CPU-side preparation and title-memory copies, not frame generation or raw GPU
 raster throughput.
 
 The final Release session was left running for physical-controller testing.
+## Resolution floor correction
+
+The active test session used 1920x1080 output with a 0.5 render scale, which is
+960x540 internally. The requested range is 720p to 1080p, so the next session
+changes the internal scale to `0.6666667`: 1280x720 internal, 1920x1080 output.
+The title's own upscaler remains in use. Historical measurements at 0.5 stay in
+the table above; they are not relabelled as 720p.
