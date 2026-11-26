@@ -1,7 +1,7 @@
 # RX 6700 XT profile for VIctory-7900XTX.
 # Defaults to the measured Redline profile. Use -Stable for relay 0 compatibility or -Safe for a minimal path.
 #   scripts\play-rx6700xt.ps1 -Exe <executable> [-Stable|-Safe] [-FastLoad] [-RayTracing] [-ExperimentalFast]
-#   add [-Bar] [-PortGuard] [-PortJournal] [-PortTune] [-KernelCopy] [-SeriesX] [-ShortHash] for measured A/B candidates
+#   add [-Bar] [-PortGuard] [-PortJournal] [-PortTune] [-KernelCopy] [-SeriesX] [-ShortHash] [-Residency] [-MemoryConservative] [-MemoryAggressive] [-CardBuffer256] [-FrameLog] [-GpuTiming] [-CaptureDir <dir>] for measured A/B candidates
 # Redline defaults to Series S, relay 1, 1080p output and a 720p internal render scale. It was stable
 # on this RX 6700 XT and roughly doubled frame rate over relay 0. -ExperimentalFast keeps the older 7900 XTX settings.
 param(
@@ -20,6 +20,16 @@ param(
     [switch]$SeriesS,
     [switch]$SeriesX,
     [switch]$ShortHash,
+    [switch]$Residency,
+    [switch]$MemoryConservative,
+    [switch]$MemoryAggressive,
+    [switch]$CardBuffer256,
+    [switch]$FrameLog,
+    [switch]$GpuTiming,
+    [string]$CaptureDir = '',
+    [switch]$CaptureWorld,
+    [ValidateRange(1, 10000)][int]$CaptureEvery = 64,
+    [string]$LogTarget = '',
     [switch]$LeanThreads,
     [ValidateSet('diag', 'release')][string]$Build = 'diag',
     [hashtable]$More = @{}
@@ -99,8 +109,28 @@ if ($LeanThreads) {
 if ($PortGuard -or $PortTune) { $settings.VICTORY_PORT_GUARD = '1' }
 if ($KernelCopy) { $settings.VICTORY_COPY_PLAIN = '0' }
 if ($ShortHash) { $settings.VICTORY_CARD_HASH_LEN = '1' }
+if ($Residency) { $settings.VICTORY_RESIDENCY = '1' }
+if ($MemoryAggressive) {
+    $settings.VICTORY_TEXTURE_STAGE_MB = '192'
+}
+if ($MemoryConservative) {
+    $settings.VICTORY_RESIDENCY = '1'
+    $settings.VICTORY_TEXTURE_STAGE_MB = '64'
+    $settings.VICTORY_CARD_BUFFERS_MB = '256'
+}
 if ($PortJournal -or $PortTune) { $settings.VICTORY_PORT_JOURNAL = '1' }
 if ($RayTracing) { $settings.VICTORY_BVH_BUILDER = '1' }
+if ($FrameLog) { $settings.VICTORY_FRAME_LOG = '1' }
+if ($GpuTiming) { $settings.VICTORY_GPU_TIMING = '1' }
+if ($CaptureWorld -and -not $CaptureDir) { throw '-CaptureWorld requires -CaptureDir.' }
+if ($CaptureDir) {
+    $settings.VICTORY_CAPTURE = (New-Item -ItemType Directory -Path $CaptureDir -Force).FullName
+    if ($CaptureWorld) {
+        $settings.VICTORY_CAPTURE_WORLD = '1'
+        $settings.VICTORY_CAPTURE_WORLD_EVERY = "$CaptureEvery"
+    }
+}
+if ($LogTarget) { $settings.VICTORY_LOG = $LogTarget }
 foreach ($key in $More.Keys) { $settings[$key] = [string]$More[$key] }
 
 $victory = Join-Path $PSScriptRoot "..\target\$Build\victory.exe"
