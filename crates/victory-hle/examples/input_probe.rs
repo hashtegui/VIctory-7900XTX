@@ -34,13 +34,17 @@ fn main() -> Result<(), Box<dyn Error>> {
                 Button::DPadRight,
                 Button::LeftThumb,
                 Button::RightThumb,
+                Button::LeftTrigger,
+                Button::LeftTrigger2,
+                Button::RightTrigger,
+                Button::RightTrigger2,
             ]
             .into_iter()
             .filter(|button| pad.is_pressed(*button))
             .map(|button| format!("{button:?}"))
             .collect();
             now.push(format!(
-                "{id:?} name={:?} vid={:?} pid={:?} buttons={buttons:?} lx={:.3} ly={:.3} rx={:.3} ry={:.3} lt={:.3} rt={:.3}",
+                "{id:?} name={:?} vid={:?} pid={:?} buttons={buttons:?} lx={:.3} ly={:.3} rx={:.3} ry={:.3} leftz={:.3} rightz={:.3} l2btn={:.3} r2btn={:.3}",
                 pad.name(),
                 pad.vendor_id(),
                 pad.product_id(),
@@ -50,6 +54,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 pad.value(Axis::RightStickY),
                 pad.value(Axis::LeftZ),
                 pad.value(Axis::RightZ),
+                pad.button_data(Button::LeftTrigger2).map_or(0.0, |data| data.value()),
+                pad.button_data(Button::RightTrigger2).map_or(0.0, |data| data.value()),
             ));
         }
         let text = now.join("\n");

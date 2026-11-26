@@ -1185,14 +1185,21 @@ mod host {
     ];
 
     fn generic_pad(pad: &Gamepad<'_>) -> PadState {
-        let trigger = |axis| pad.value(axis).clamp(0.0, 1.0);
+        let axis = |axis| pad.value(axis).clamp(0.0, 1.0);
+        let button = |button| {
+            pad.button_data(button)
+                .map_or(0.0, |data| data.value())
+                .clamp(0.0, 1.0)
+        };
         PadState {
             buttons: GENERIC_BUTTONS
                 .iter()
                 .filter(|(button, _)| pad.is_pressed(*button))
                 .fold(0, |all, (_, bit)| all | bit),
-            left_trigger: trigger(Axis::LeftZ),
-            right_trigger: trigger(Axis::RightZ),
+            // DualShock 4 arrives as axes 4/5 on some drivers and as analog
+            // trigger buttons on others. Read both and keep the stronger value.
+            left_trigger: axis(Axis::LeftZ).max(button(Button::LeftTrigger2)),
+            right_trigger: axis(Axis::RightZ).max(button(Button::RightTrigger2)),
             left_x: pad.value(Axis::LeftStickX).clamp(-1.0, 1.0),
             left_y: pad.value(Axis::LeftStickY).clamp(-1.0, 1.0),
             right_x: pad.value(Axis::RightStickX).clamp(-1.0, 1.0),
