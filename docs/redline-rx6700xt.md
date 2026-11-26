@@ -319,3 +319,31 @@ This changes title-memory reads, not the game data, save, resolution or control
 mapping. The next game run must still establish the RX 6700 XT frame-time delta;
 the 7-12% figure remains Kelvaroq's measurement on its own NVIDIA test machine
 until reproduced here.
+
+## First process-copy game run
+
+Launch on 2026-11-26 at 13:55 local time:
+
+- Release build with the Kelvaroq process-copy path;
+- `-FastLoad -Bar -PortTune`;
+- output 1920x1080, internal render scale 0.6666667 (1280x720);
+- Relay 1, 4/4/2 workers, ray tracing and frame generation off.
+
+After the save loaded, the first heavy view began at 9 fps / about 109 ms
+with 12,110 draws. The next ten minutes stayed between 6 and 10 fps at
+5,966-13,172 draws, with most settled samples at 7-10 fps and 99-158 ms.
+No sample produced the 600-1,000 ms stalls seen repeatedly in the previous
+session. Private memory reached 22.70 GiB and settled near 22.5 GiB, below the
+25.8 GiB peak of the old path.
+
+The CPU profile changed from one thread near 93% of a core plus a 99-100%
+compute engine to roughly 440% process CPU spread over eight helper/title
+threads, while compute remained near 100%. The remaining limit in these sampled
+views is therefore GPU compute, not a single copy thread. No runtime, DXGI, TDR
+or Windows driver error appeared.
+
+This is a before/after observation on the same save area, not an in-run switch:
+the launcher now records `VICTORY_COPY_PLAIN=1` explicitly. `-KernelCopy` sets it
+to `0` for the next controlled A/B. `-SeriesS` is also available for the
+upstream-measured, approximately 5 ms lighter console profile; it has not been
+claimed as a local gain until it is run here.
