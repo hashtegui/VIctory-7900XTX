@@ -226,3 +226,53 @@ current process exits:
 The purpose is to test whether moving large windows and send buffers through BAR
 can remove enough CPU-side copy time to exceed 12 fps while respecting the 720p
 floor.
+## Latest PortWatch snapshot and upstream delta (2026-11-26T13:35:57Z)
+
+The live `https://portwatch-vi.xyz/data/tracker.json` snapshot reports:
+
+| Score | Project | Reported GPU / FPS | Action here |
+|---|---:|---|---|
+| 91.5% | `codec-d/cool_fox` (CGBJ) | NVIDIA / 25 fps | Public source now returns 404; cannot apply |
+| 87.8% | NotNozy | AMD / 16 fps | Private build; no code to inspect |
+| 84.8% | darkworldhm | NVIDIA / 15 fps | No public code available from the tracker |
+| 84.0% | Doomsday | AMD + NVIDIA / 4 fps | Lower measured gain than the current base |
+| 83.1% | `avatarmanz/VIctory-7900XTX` | AMD / 16 fps | Base for this fork |
+| 79.0% | `Belobug/VIctory-Belobug-AMD` | AMD / 8 fps | Many fixes are already credited upstream |
+| 78.0% | `DexNom/VIctory` | AMD / 3 fps | Its Radeon fixes are partly merged upstream |
+| 68.8% | `fablinoo/kelvaroq` | NVIDIA / 10 fps | Different CPU-submission design; not admitted without an RX 6700 XT A/B |
+| 68.2% | `fxceless/victory-fork` | NVIDIA / 3 fps | Useful instrumentation and worker experiments; not a direct merge |
+
+AvatarManz advanced from `0dec5dc` to `c9c932c`. The new work merges renderer
+ports 6 and 7:
+
+- `VICTORY_PORT_GUARD=1` shares the write-guard lock and moves refresh
+  planning beside the submitting thread. Upstream measured title-thread waits
+  falling from 29 ms to about 2 ms per frame and a 2 ms frame-time gain.
+- `VICTORY_PORT_JOURNAL=1` asks for the heaps' records at submit and splits
+  journal notes into 64 locked parts. Upstream measured the submit-thread wait
+  falling from roughly 6 ms to 0.3 ms and a 1-3 ms frame-time gain.
+- Upstream's combined renderer-port result on its 7900 XTX test scene was
+  45.8 to 44.9 ms per frame (about 21.8 to 22.3 fps).
+
+This branch merged that upstream state as commit `63ff417`. The new switches
+remain off by default. `scripts/play-rx6700xt.ps1` now exposes them as
+`-PortGuard`, `-PortJournal`, and the combined `-PortTune` candidate. They have
+not yet been claimed as improvements on the RX 6700 XT.
+
+## Live 720p + BAR validation
+
+The current Release session uses 1920x1080 output, a 1280x720 internal render
+scale, relay 1, DirectStorage staging, and BAR. In the first scene after the
+boat, the title's own counter showed:
+
+- a worst sampled frame at 2 fps / 456.6 ms with 7,937 draws;
+- repeated 3-5 fps samples at 180-265 ms;
+- recovery to 7-9 fps / 108-144 ms in the same area;
+- 23.15-23.65 GiB private memory and no increase indicating exhaustion;
+- no `ERROR`, TDR, DXGI device removal, crash or watchdog line.
+
+Windows GPU Engine counters showed the compute engine at 99-100%, the 3D engine
+at roughly 19-36%, and copy at about 1%. This makes the low frame rate a real
+scene cost on this PC. The upstream guard/journal fixes target CPU-side waits,
+so they may not recover all of the compute-bound frames; they still form the
+next low-risk A/B because both are isolated switches.

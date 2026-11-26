@@ -1,6 +1,7 @@
 # RX 6700 XT profile for VIctory-7900XTX.
 # Defaults to the measured Redline profile. Use -Stable for relay 0 compatibility or -Safe for a minimal path.
 #   scripts\play-rx6700xt.ps1 -Exe <executable> [-Stable|-Safe] [-FastLoad] [-RayTracing] [-ExperimentalFast]
+#   add [-Bar] [-PortGuard] [-PortJournal] [-PortTune] for measured A/B candidates
 # Redline uses relay 1, 1080p output and a 720p internal render scale. It was stable
 # on this RX 6700 XT and roughly doubled frame rate over relay 0. -ExperimentalFast keeps the older 7900 XTX settings.
 param(
@@ -12,6 +13,9 @@ param(
     [switch]$FastLoad,
     [switch]$LowCopy,
     [switch]$Bar,
+    [switch]$PortGuard,
+    [switch]$PortJournal,
+    [switch]$PortTune,
     [switch]$LeanThreads,
     [ValidateSet('diag', 'release')][string]$Build = 'diag',
     [hashtable]$More = @{}
@@ -86,6 +90,10 @@ if ($LeanThreads) {
     $settings.VICTORY_JOIN_PARTS = '4'
     $settings.VICTORY_MAP_THREADS = '2'
 }
+# Upstream renderer ports 6 and 7. They remain opt-in because the published
+# measurements used a 7900 XTX; -PortTune enables both for one RX 6700 XT A/B.
+if ($PortGuard -or $PortTune) { $settings.VICTORY_PORT_GUARD = '1' }
+if ($PortJournal -or $PortTune) { $settings.VICTORY_PORT_JOURNAL = '1' }
 if ($RayTracing) { $settings.VICTORY_BVH_BUILDER = '1' }
 foreach ($key in $More.Keys) { $settings[$key] = [string]$More[$key] }
 
