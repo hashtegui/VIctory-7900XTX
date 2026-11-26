@@ -213,3 +213,16 @@ The active test session used 1920x1080 output with a 0.5 render scale, which is
 changes the internal scale to `0.6666667`: 1280x720 internal, 1920x1080 output.
 The title's own upscaler remains in use. Historical measurements at 0.5 stay in
 the table above; they are not relabelled as 720p.
+## Next automated test
+
+The current Release session did not close by the second monitoring window and was
+left in its menu. A watcher is armed to launch the next candidate only after the
+current process exits:
+
+- 1920x1080 output and 1280x720 internal rendering;
+- relay 1, 4/4/2 workers, `-FastLoad`;
+- `-Bar`: `VICTORY_WINDOWS_BAR_MB=3072`, `VICTORY_SEND_BAR=1`.
+
+The purpose is to test whether moving large windows and send buffers through BAR
+can remove enough CPU-side copy time to exceed 12 fps while respecting the 720p
+floor.

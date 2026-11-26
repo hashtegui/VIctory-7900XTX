@@ -1,7 +1,7 @@
 # RX 6700 XT profile for VIctory-7900XTX.
 # Defaults to the measured Redline profile. Use -Stable for relay 0 compatibility or -Safe for a minimal path.
 #   scripts\play-rx6700xt.ps1 -Exe <executable> [-Stable|-Safe] [-FastLoad] [-RayTracing] [-ExperimentalFast]
-# Redline uses relay 1, 1080p output and a 0.5 internal render scale. It was stable
+# Redline uses relay 1, 1080p output and a 720p internal render scale. It was stable
 # on this RX 6700 XT and roughly doubled frame rate over relay 0. -ExperimentalFast keeps the older 7900 XTX settings.
 param(
     [Parameter(Mandatory)][string]$Exe,
