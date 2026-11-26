@@ -1,0 +1,113 @@
+# Redline audit — RX 6700 XT
+
+This file records measured Project Redline work on `rx6700xt-adaptation`. It does
+not claim a feature that the runtime does not implement.
+
+## G0 — environment
+
+| Item | Observed |
+|---|---|
+| CPU | AMD Ryzen 5 7500F, 6 physical cores / 12 logical CPUs |
+| RAM | 31.6 GiB |
+| GPU | AMD Radeon RX 6700 XT, PCI device `0x73DF`, 12 GB |
+| Driver | AMD Adrenalin `32.0.21045.5002`, 2026-08-16 |
+| OS | Windows 11 Pro 26200 x64 |
+| Host target | `x86_64-pc-windows-gnu` because no MSVC linker is installed |
+| Game build | `1.0.2.1 retail (Scarlett)`, BLAKE3 `b99f876b...39e93` |
+| Console profile | Xbox Series X |
+
+`PresentMon-x64.exe` is available through the AMD driver installation. RGP,
+RMV, RGA, RRA and RGD are not installed, so no counter data from those tools is
+claimed. The fork's own frame, transfer, memory, pipeline and streaming logs are
+the primary evidence.
+
+## G1 — build and cache
+
+The diagnostics build succeeds with Rust 1.98.1 GNU. The focused `victory-hle`
+tests and full `cargo check -p victory --features diagnostics` pass. The fork's
+entire Rust tree is not `rustfmt --check` clean upstream; only touched files are
+formatted and checked.
+
+The shader warm-up scanned the complete 208.5 GiB data tree:
+
+- before: 6,540 shader-cache files, 399.7 MiB
+- command: `victory.exe shaders --jobs 6`
+- duration: 348 s
+- translated: 25,782
+- rejected: 203
+- after: 28,909 shader-cache files, 1,106 MiB
+
+Rejected translation was dominated by 198 non-program DXIL containers. The
+remaining five failed on descriptor data reads. None of these results is a
+claim that every game shader is translated.
+
+## Existing baseline before this audit
+
+| Run | Result |
+|---|---|
+| WARP diagnostics | reached first-boot menus, intro and world transition |
+| RX 6700 XT safe | 30 fps menus; 0-5 fps world preparation; reached world |
+| RX 6700 XT fast/7900 profile | device removed `0x887A0007` after six seconds in world |
+| RX 6700 XT stable, 25-minute launch | 3-5 fps world, peak 28.83 GiB private; RAM fell below 0.4 GiB; process exited after 14m34s monitored without a new VIctory crash record |
+
+The long stable run therefore ended at the title's watchdog or normal process
+termination, not in a fresh D3D12 crash recorded by VIctory. The distinction is
+kept.
+
+## G2-G4 — hot-cache diagnostic run
+
+Cache-hot launch on 2026-11-25 23:51:
+
+- menus: 29-30 fps, 33.3 ms/frame
+- preparation in menus: 0.3-3.0 ms
+- initial world transition: large texture backlog and 0-3 fps
+- dedicated VRAM during the heavy scene: 8,830 MiB used of a 9,760 MiB budget
+- shared memory used with the card: 8,270 MiB
+- private process memory: about 24.6 GiB in the same scene
+- pipeline creation had fallen to zero after the transition
+
+A representative 325 ms frame reported:
+
+| Component | Time |
+|---|---|
+| Frame preparation | 114.3 ms |
+| Copies for preparation | 65.5 ms / 236.6 MiB |
+| GPU | 80.5 ms |
+| Copy back to title memory | 95.3 ms / 93.5 MiB |
+| Texture refresh, all threads | 42.7 ms |
+| Waiting for title-memory guards | 43.8 ms |
+| Changing memory protections | 22.3 ms |
+| Heap-view pass | 18.8 ms |
+
+The 23,387 textures still waiting demonstrates that the critical path includes
+residency and streaming, not only shader execution. The GPU was only about 22%
+busy by the fork's submission clock in the sampled interval, while the
+submitting thread and copyback work were busy. This is a CPU/copy/synchronization
+problem first.
+
+## Decision queue
+
+Changes are admitted only with an A/B result:
+
+1. `VICTORY_UPLOAD_AHEAD=1` on the stable profile, to reduce texture waiting
+   during region changes.
+2. Six-core worker tuning: 4 translation threads, 4 joined parts and 2 mapping
+   workers, to reduce oversubscription against the title's threads.
+3. `VICTORY_CARD_BUFFERS_MIN_KB=64` only if freed VRAM remains sufficient;
+   current dedicated VRAM headroom is too small to assume this is free.
+4. Relay stages and `TEXTURE_NO_WAIT` only after their documented RDNA 2 device
+   loss behavior is re-tested together with `BURY_LAG=0`.
+5. Release build comparison after the diagnostics build has established the
+   bottleneck.
+
+AFMF, FSR frame generation and synthetic frame duplication are not enabled.
+The tree has no integrated FSR spatial/temporal upscaler to validate, so no FSR
+quality or scaling result is claimed.
+
+## Open gaps
+
+- PresentMon capture must be summarized after the session process exits and
+  releases its CSV.
+- A repeatable save/scene must be used for candidate runs.
+- RGP/RMV/RGA/RRA/RGD counters are unavailable on this machine.
+- Ten-minute stable validation at the winning profile remains required.
