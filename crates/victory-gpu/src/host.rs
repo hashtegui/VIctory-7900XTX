@@ -8708,7 +8708,8 @@ pub(crate) fn copy_mapped(dst: *mut u8, src: *const u8, len: usize, title_dst: b
     let since = crate::watch::changes();
     // (A title destination that is away only while the runtime changes a
     // mapping beside it is written when that is done.)
-    let whole = read(src, dst, len) || title_dst && crate::watch::again_after_change(since, || read(src, dst, len));
+    let whole = (if title_dst { read(src, dst, len) } else { read_host(src, dst, len) })
+        || title_dst && crate::watch::again_after_change(since, || read(src, dst, len));
     #[cfg(feature = "diagnostics")]
     crate::copystat::add(crate::copystat::C::MoveUs, moved.elapsed().as_micros() as u64);
     if whole {
@@ -8804,7 +8805,14 @@ fn zero(to: *mut u8, n: usize) {
 /// Reads title memory at `src` into `dst`; false if a page of it is not
 /// readable.
 pub(crate) fn read_into(src: *const u8, dst: &mut [u8]) -> bool {
-    read(src, dst.as_mut_ptr(), dst.len())
+    read_host(src, dst.as_mut_ptr(), dst.len())
+}
+
+/// Copies into a host destination without the kernel when it can, and retries
+/// the same range through the kernel if a title page faults.
+fn read_host(src: *const u8, dst: *mut u8, len: usize) -> bool {
+    // SAFETY: the caller owns the writable host destination for this read.
+    (unsafe { crate::plaincopy::copy(src, dst, len) }) || read(src, dst, len)
 }
 
 /// Reads what is there of the `dst.len()` bytes of title memory at `src`,
@@ -9216,6 +9224,8 @@ impl Meter {
                 let scale = if i % 2 == 0 { 1e3 } else { 1e6 };
                 PREPARING[i].swap(0, Ordering::Relaxed) as f64 / scale / frames
             });
+            let [plain, fault, small, cooling, off] = crate::plaincopy::per_frame(frames);
+            let kernel = fault + small + cooling + off;
             let [back_ms, back_mb] = [0, 1].map(|i| {
                 COPY_BACK[i].swap(0, Ordering::Relaxed) as f64 / [1e3, 1e6][i] / frames
             });
@@ -9397,7 +9407,7 @@ impl Meter {
                 }
                 tracing::info!(
                     "{fps:.1} fps, {ms:.1} ms/frame ({cpu:.1} preparing: copies {copy_ms:.1} ms \
-                     {copy_mb:.1} MB, textures {texture_ms:.1} ms {texture_mb:.1} MB; {gpu:.1} on the \
+                     {copy_mb:.1} MB, host reads/frame {plain:.1} plain, {kernel:.1} kernel ({fault:.1} fault, {small:.1} small, {cooling:.1} cooling, {off:.1} off), textures {texture_ms:.1} ms {texture_mb:.1} MB; {gpu:.1} on the \
                      GPU; {back_ms:.1} copying back {back_mb:.1} MB), {draws:.0} draws/frame, \
                      dropped {dropped:.0} without a host pipeline ({making} being made) and \
                      {indirect:.0} indirect; heap buffers {picked:.1} passes {picked_ms:.1} ms;                  texture slots written so far: {placed} placed, {objects} of objects; \

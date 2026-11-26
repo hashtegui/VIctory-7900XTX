@@ -1,8 +1,8 @@
 # RX 6700 XT profile for VIctory-7900XTX.
 # Defaults to the measured Redline profile. Use -Stable for relay 0 compatibility or -Safe for a minimal path.
 #   scripts\play-rx6700xt.ps1 -Exe <executable> [-Stable|-Safe] [-FastLoad] [-RayTracing] [-ExperimentalFast]
-#   add [-Bar] [-PortGuard] [-PortJournal] [-PortTune] for measured A/B candidates
-# Redline uses relay 1, 1080p output and a 720p internal render scale. It was stable
+#   add [-Bar] [-PortGuard] [-PortJournal] [-PortTune] [-KernelCopy] [-SeriesX] [-ShortHash] for measured A/B candidates
+# Redline defaults to Series S, relay 1, 1080p output and a 720p internal render scale. It was stable
 # on this RX 6700 XT and roughly doubled frame rate over relay 0. -ExperimentalFast keeps the older 7900 XTX settings.
 param(
     [Parameter(Mandatory)][string]$Exe,
@@ -16,6 +16,10 @@ param(
     [switch]$PortGuard,
     [switch]$PortJournal,
     [switch]$PortTune,
+    [switch]$KernelCopy,
+    [switch]$SeriesS,
+    [switch]$SeriesX,
+    [switch]$ShortHash,
     [switch]$LeanThreads,
     [ValidateSet('diag', 'release')][string]$Build = 'diag',
     [hashtable]$More = @{}
@@ -37,7 +41,7 @@ $settings = @{
     # relay stages 1/2, texture no-wait and the two-submission burial lag able
     # to remove the device. Stability comes first; ExperimentalFast opts in.
     VICTORY_RELAY = '0'; VICTORY_TEXTURE_NO_WAIT = '0'; VICTORY_CARD_STEPS = '0'; VICTORY_BURY_LAG = '0'
-    VICTORY_WIDE_BACK = '1'; VICTORY_CARD_REHASH_RUNS = '1'
+    VICTORY_WIDE_BACK = '1'; VICTORY_CARD_REHASH_RUNS = '1'; VICTORY_COPY_PLAIN = '1'
     VICTORY_JOIN_COPIES = '1'; VICTORY_INDIRECT_WINDOW = '1'; VICTORY_RELAY_COPY = '1'
     VICTORY_INDIRECT_BATCH = '2'; VICTORY_TITLE_PRIORITIES = '0'; VICTORY_CARD_AWAKE = '1'
     VICTORY_SHOW_AFTER = '1'; VICTORY_AMBIENT = '0.8'; VICTORY_D3D12_DRED = 'light'
@@ -93,6 +97,8 @@ if ($LeanThreads) {
 # Upstream renderer ports 6 and 7. They remain opt-in because the published
 # measurements used a 7900 XTX; -PortTune enables both for one RX 6700 XT A/B.
 if ($PortGuard -or $PortTune) { $settings.VICTORY_PORT_GUARD = '1' }
+if ($KernelCopy) { $settings.VICTORY_COPY_PLAIN = '0' }
+if ($ShortHash) { $settings.VICTORY_CARD_HASH_LEN = '1' }
 if ($PortJournal -or $PortTune) { $settings.VICTORY_PORT_JOURNAL = '1' }
 if ($RayTracing) { $settings.VICTORY_BVH_BUILDER = '1' }
 foreach ($key in $More.Keys) { $settings[$key] = [string]$More[$key] }
@@ -107,4 +113,9 @@ foreach ($key in $settings.Keys) { Set-Item "Env:$key" $settings[$key] }
 $Exe = (Resolve-Path -LiteralPath $Exe).Path
 Write-Host "RX 6700 XT profile=$profile physicalCores=$physicalCores logicalCpus=$logicalCpus translateThreads=$($settings['VICTORY_THIN_THREADS']) joinParts=$($settings['VICTORY_JOIN_PARTS']) mappingThreads=$($settings['VICTORY_MAP_THREADS'])"
 Push-Location (Join-Path $PSScriptRoot '..')
-try { & $victory run $Exe --execute } finally { Pop-Location }
+try {
+    $runArgs = @('run', $Exe, '--execute')
+    if ($SeriesX -and $SeriesS) { throw '-SeriesX and -SeriesS cannot be combined.' }
+    if (-not $SeriesX) { $runArgs += @('--console', 'series-s') }
+    & $victory @runArgs
+} finally { Pop-Location }

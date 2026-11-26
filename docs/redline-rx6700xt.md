@@ -276,3 +276,106 @@ at roughly 19-36%, and copy at about 1%. This makes the low frame rate a real
 scene cost on this PC. The upstream guard/journal fixes target CPU-side waits,
 so they may not recover all of the compute-bound frames; they still form the
 next low-risk A/B because both are isolated switches.
+
+## Latest public notes applied locally (2026-11-26T16:18:31Z)
+
+PortWatch refreshed its JSON data at 16:18 UTC. The public scoreboard moved to:
+
+| Score | Project | Reported GPU / FPS | Local decision |
+|---|---:|---|---|
+| 89.6% | CGBJ | unknown / 25 fps | Repository still unavailable; no code admitted |
+| 87.1% | NotNozy | AMD / 16 fps | Private build; no code to inspect |
+| 84.8% | darkworldhm | NVIDIA / 15 fps | No public source on the tracker |
+| 82.1% | Doomsday | AMD + NVIDIA / 4 fps | Lower measured FPS than this profile |
+| 81.8% | `avatarmanz/VIctory-7900XTX` | AMD / 16 fps | Code remains at `c9c932c`; only the README advanced to `2de9980` |
+| 77.4% | `DexNom/VIctory` | AMD / 3 fps | No new performance commit in this refresh |
+| 77.2% | `Belobug/VIctory-Belobug-AMD` | AMD / 8 fps | No new AMD performance commit in this refresh |
+| 68.8% | `stellarr-studio/kelvaroq` | NVIDIA / 10 fps | Repository moved from `fablinoo`; its process-copy patch was admitted and tested here |
+
+Kelvaroq's latest public notes report that its process-copy patch cut heavy-frame
+time by 7-12% above 5,000 draws and removed one-second spikes. Its wide GPU hash
+and 12 GB class card-buffer defaults were already present in this AvatarManz
+tree, so only the missing copy path was ported.
+
+### In-process title-memory copy
+
+The branch `rx6700xt-kelvaroq-opt` now includes `plaincopy.rs` from Kelvaroq's
+patch 0044. Reads into host memory first use the processor copy path; a title
+page fault falls back to the same range through `ReadProcessMemory`. Reads under
+256 bytes and recently faulted 64 KiB blocks stay on the kernel path. Title
+destinations continue to use the kernel path.
+
+`VICTORY_COPY_PLAIN=0` restores the previous behavior. The launcher exposes this
+comparison as `-KernelCopy`; the fast process-copy path is the default.
+
+Validation on this checkout:
+
+- `cargo test -p victory-gpu plaincopy::x64::tests --lib`: 5 passed;
+- `cargo check -p victory --features diagnostics`: passed;
+- tests cover missing interior pages, guarded aliases, one-shot Windows guards,
+  small-read fallback and cooldown after a fault.
+
+This changes title-memory reads, not the game data, save, resolution or control
+mapping. The next game run must still establish the RX 6700 XT frame-time delta;
+the 7-12% figure remains Kelvaroq's measurement on its own NVIDIA test machine
+until reproduced here.
+
+## First process-copy game run
+
+Launch on 2026-11-26 at 13:55 local time:
+
+- Release build with the Kelvaroq process-copy path;
+- `-FastLoad -Bar -PortTune`;
+- output 1920x1080, internal render scale 0.6666667 (1280x720);
+- Relay 1, 4/4/2 workers, ray tracing and frame generation off.
+
+After the save loaded, the first heavy view began at 9 fps / about 109 ms
+with 12,110 draws. The next ten minutes stayed between 6 and 10 fps at
+5,966-13,172 draws, with most settled samples at 7-10 fps and 99-158 ms.
+No sample produced the 600-1,000 ms stalls seen repeatedly in the previous
+session. Private memory reached 22.70 GiB and settled near 22.5 GiB, below the
+25.8 GiB peak of the old path.
+
+The CPU profile changed from one thread near 93% of a core plus a 99-100%
+compute engine to roughly 440% process CPU spread over eight helper/title
+threads, while compute remained near 100%. The remaining limit in these sampled
+views is therefore GPU compute, not a single copy thread. No runtime, DXGI, TDR
+or Windows driver error appeared.
+
+This is a before/after observation on the same save area, not an in-run switch:
+the launcher now records `VICTORY_COPY_PLAIN=1` explicitly. `-KernelCopy` sets it
+to `0` for the next controlled A/B. `-SeriesS` is also available for the
+upstream-measured, approximately 5 ms lighter console profile; it has not been
+claimed as a local gain until it is run here.
+
+## Series S, short hash and native-720 A/B (2026-11-26)
+
+All runs kept the process-copy path, Relay 1, BAR, renderer ports 6/7,
+4/4/2 workers, 720p internal rendering and no frame generation.
+
+| Profile | Typical heavy view | Memory | Result |
+|---|---|---|---|
+| Series X + 720p -> 1080p | 6-10 fps, 99-180 ms | ~22.5 GiB private | baseline after process copies |
+| Series S + 720p -> 1080p | 9-11 fps, 94-115 ms | ~20.6 GiB private | selected |
+| Light Series S view | 20-25 fps | ~20.5 GiB private | consistent with a real draw-count drop |
+| Series S + short card hash | 6-11 fps, 93-172 ms | ~20.0 GiB private | no consistent gain; remains opt-in |
+| Native 1280x720, upscaler omitted | failed before gameplay | n/a | rejected |
+
+The selected Series S run loaded the same save, held 9-11 fps at 7.2-10.1k
+draws, and exited after about six minutes without an Application Error, WER,
+AMD display event or new VIctory crash record. The GPU compute engine remained
+at about 98-99%, so the gain comes from less work in the Series S render path,
+not from lowering resolution.
+
+`VICTORY_CARD_HASH_LEN=1` did not produce a repeatable gain in the sampled
+views. It is exposed as `-ShortHash` for further tests but is not selected.
+
+The native-720 test was invalid on this build. The logs reported
+`FSR_API_DEBUG_ERROR: Shipping FSR4 configuration mismatch: maxUpscaleSize
+must be 1920x1080; received 1280x720`, followed by an unhandled divide-by-zero
+at `0xc0000094`. The broken `-Native720` launcher path was removed. The title's
+fixed FSR4 tables require the 1920x1080 output target, so internal 720p must
+remain the 720-to-1080 upscale path.
+
+The Redline launcher now defaults to Series S. `-SeriesX` selects the previous
+profile for A/B tests; `-SeriesS` remains accepted for compatibility.
