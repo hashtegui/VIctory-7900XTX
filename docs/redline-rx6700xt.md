@@ -111,3 +111,59 @@ quality or scaling result is claimed.
 - A repeatable save/scene must be used for candidate runs.
 - RGP/RMV/RGA/RRA/RGD counters are unavailable on this machine.
 - Ten-minute stable validation at the winning profile remains required.
+## PortWatch snapshot and upstream merge (2026-11-26T10:23:53Z)
+
+PortWatch's current public board:
+
+| Score | Project | Reported GPU / FPS | Usability here |
+|---|---|---|---|
+| 91.5% | `codec-d/cool_fox` (CGBJ) | NVIDIA, 25 fps | Repository currently returns 404; code cannot be applied |
+| 83.1% | `avatarmanz/VIctory-7900XTX` | AMD, 16 fps | Base upstream |
+| 79.0% | `Belobug/VIctory-Belobug-AMD` | AMD, 8 fps | Already credited and partly merged upstream |
+| 78.0% | `DexNom/VIctory` | AMD, 3 fps | Already credited and partly merged upstream |
+| 68.8% | `fablinoo/kelvaroq` | NVIDIA, 10 fps | Public, but lower score and NVIDIA-specific; no direct change admitted yet |
+
+The Avatar upstream had advanced 152 commits from our fork point. The branch
+merged `0dec5dc` without conflicts. Relevant additions include:
+
+- title-owned output size and render scale (`VICTORY_OUTPUT`,
+  `VICTORY_RENDER_SCALE`, `VICTORY_UPSCALER`);
+- frame pacing unlock (`VICTORY_FRAME_INTERVAL_MS`);
+- renderer ports for constants, descriptors and CBV;
+- AMD-safe CoolFox two-plane compose, barrier and table-plan work;
+- pipeline-book write retry and orderly-exit flushing;
+- DirectStorage staging floor (`VICTORY_DSTORAGE_STAGING_MB`).
+
+## A/B decisions after the merge
+
+Baseline and candidates used the same save, Series X profile, RX 6700 XT,
+driver `32.0.21045.5002`, and AFMF/frame generation off.
+
+| Candidate | Observed | Decision |
+|---|---|---|
+| Sync relay 0, 4K output | 3–4 fps, ~240–315 ms | compatibility baseline |
+| Port descriptors + constants on relay 0 | 3–4 fps, no measured gain; heavier load transient | rejected |
+| Relay 1 + 1080p + 0.75 scale | 9–10 fps, ~104–115 ms | keep relay and resolution |
+| Port constants + CBV on relay 1 | 0.2–4.6 fps, 1–6 s preparation in the world | rejected |
+| Relay 1 + 1080p + 0.5 scale | 10.6–10.9 fps, ~92–95 ms, GPU ~27 ms | selected |
+| Relay 2 + 0.5 scale | not validated: session stopped at player selection | not default |
+
+The winning profile roughly doubled or tripled frame rate while keeping the GPU
+below saturation. The remaining representative 0.5-scale frame costs about
+62 ms preparing (28 ms copies), 27 ms GPU and 23 ms copy-back.
+
+`VICTORY_DSTORAGE_STAGING_MB=256` is exposed by `-FastLoad`. Its load-time gain is
+still being measured and is not claimed yet.
+
+## Current default
+
+`scripts/play-rx6700xt.ps1` now defaults to `redline`:
+
+- relay 1, retirement lag 0, card steps 0;
+- output 1920x1080, internal scale 0.5, title upscaler;
+- six translator/join workers and four mapping workers;
+- no frame generation and no ray tracing;
+- `-Stable` for the previous relay-0 path, `-Safe` for the minimal path;
+- `-FastLoad` for the DirectStorage staging experiment.
+
+The current Release session is the first validation of this exact script.

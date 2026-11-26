@@ -1,13 +1,15 @@
 # RX 6700 XT profile for VIctory-7900XTX.
-# Defaults to a stable threaded path scaled to this CPU. Use -Safe for a minimal path.
-#   scripts\play-rx6700xt.ps1 -Exe <executable> [-Safe] [-RayTracing] [-ExperimentalFast]
-# The default profile is the stable RDNA 2 path. -ExperimentalFast restores the
-# 7900 XTX speed settings that remove the device on several RDNA 2 cards.
+# Defaults to the measured Redline profile. Use -Stable for relay 0 compatibility or -Safe for a minimal path.
+#   scripts\play-rx6700xt.ps1 -Exe <executable> [-Stable|-Safe] [-FastLoad] [-RayTracing] [-ExperimentalFast]
+# Redline uses relay 1, 1080p output and a 0.5 internal render scale. It was stable
+# on this RX 6700 XT and roughly doubled frame rate over relay 0. -ExperimentalFast keeps the older 7900 XTX settings.
 param(
     [Parameter(Mandatory)][string]$Exe,
     [switch]$Safe,
+    [switch]$Stable,
     [switch]$RayTracing,
     [switch]$ExperimentalFast,
+    [switch]$FastLoad,
     [ValidateSet('diag', 'release')][string]$Build = 'diag',
     [hashtable]$More = @{}
 )
@@ -35,21 +37,33 @@ $settings = @{
     VICTORY_MEMORY_MAP = '0'
     VICTORY_THIN_THREADS = "$translateThreads"
 }
+if ($Safe -and $Stable) { throw '-Safe and -Stable cannot be combined.' }
 if ($Safe) {
     $settings.VICTORY_UNDER_WIDE = '0'; $settings.VICTORY_LAND_ECHO = '0'; $settings.VICTORY_MAP_THREADS = '1'
     $profile = 'safe'
-} else {
+} elseif ($Stable) {
     $settings.VICTORY_THIN = '1'; $settings.VICTORY_JOIN_PARTS = "$joinParts"
     $settings.VICTORY_UPLOAD_AHEAD = '0'; $settings.VICTORY_MAP_THREADS = "$mappingThreads"
     $profile = 'stable'
+} else {
+    # Measured Redline profile on the RX 6700 XT: relay 1 with retirement lag
+    # zero stayed up, while 1080p output and a 0.5 internal scale removed most
+    # of the pixel cost without frame generation.
+    $settings.VICTORY_RELAY = '1'
+    $settings.VICTORY_OUTPUT = '1920x1080'; $settings.VICTORY_RENDER_SCALE = '0.5'; $settings.VICTORY_UPSCALER = '6'
+    $settings.VICTORY_DSTORAGE_STAGING_MB = '256'
+    $settings.VICTORY_THIN = '1'; $settings.VICTORY_JOIN_PARTS = "$joinParts"
+    $settings.VICTORY_UPLOAD_AHEAD = '0'; $settings.VICTORY_MAP_THREADS = "$mappingThreads"
+    $profile = 'redline'
 }
 if ($ExperimentalFast) {
-    if ($Safe) { throw '-ExperimentalFast and -Safe cannot be combined.' }
+    if ($Safe -or $Stable) { throw '-ExperimentalFast cannot be combined with -Safe or -Stable.' }
     $settings.VICTORY_RELAY = '2'; $settings.VICTORY_TEXTURE_NO_WAIT = '1'
     $settings.VICTORY_CARD_STEPS = '2'; $settings.VICTORY_BURY_LAG = '64'
     $settings.VICTORY_UPLOAD_AHEAD = '1'
     $profile = 'experimental-fast'
 }
+if ($FastLoad) { $settings.VICTORY_DSTORAGE_STAGING_MB = '256' }
 if ($RayTracing) { $settings.VICTORY_BVH_BUILDER = '1' }
 foreach ($key in $More.Keys) { $settings[$key] = [string]$More[$key] }
 
