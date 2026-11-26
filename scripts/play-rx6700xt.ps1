@@ -55,7 +55,7 @@ if ($Safe) {
     # zero stayed up, while 1080p output and a 720p internal scale remove most
     # of the pixel cost without frame generation or going below the requested 720p floor.
     $settings.VICTORY_RELAY = '1'
-    $settings.VICTORY_OUTPUT = '1920x1080'; $settings.VICTORY_RENDER_SCALE = '0.5'; $settings.VICTORY_UPSCALER = '6'
+    $settings.VICTORY_OUTPUT = '1920x1080'; $settings.VICTORY_RENDER_SCALE = '0.6666667'; $settings.VICTORY_UPSCALER = '6'
     $settings.VICTORY_THIN = '1'; $settings.VICTORY_JOIN_PARTS = "$leanJoinParts"
     $settings.VICTORY_THIN_THREADS = "$leanTranslateThreads"
     $settings.VICTORY_UPLOAD_AHEAD = '0'; $settings.VICTORY_MAP_THREADS = "$leanMappingThreads"
