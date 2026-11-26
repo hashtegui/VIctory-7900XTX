@@ -10,6 +10,8 @@ param(
     [switch]$RayTracing,
     [switch]$ExperimentalFast,
     [switch]$FastLoad,
+    [switch]$LowCopy,
+    [switch]$LeanThreads,
     [ValidateSet('diag', 'release')][string]$Build = 'diag',
     [hashtable]$More = @{}
 )
@@ -64,6 +66,17 @@ if ($ExperimentalFast) {
     $profile = 'experimental-fast'
 }
 if ($FastLoad) { $settings.VICTORY_DSTORAGE_STAGING_MB = '256' }
+if ($LowCopy) {
+    # Try moving buffers down to 64 KiB onto the card before the 512 MiB cap;
+    # candidate only until the reduced PCIe traffic is measured.
+    $settings.VICTORY_CARD_BUFFERS_MIN_KB = '64'
+    $settings.VICTORY_CARD_BUFFERS_MB = '512'
+}
+if ($LeanThreads) {
+    $settings.VICTORY_THIN_THREADS = '4'
+    $settings.VICTORY_JOIN_PARTS = '4'
+    $settings.VICTORY_MAP_THREADS = '2'
+}
 if ($RayTracing) { $settings.VICTORY_BVH_BUILDER = '1' }
 foreach ($key in $More.Keys) { $settings[$key] = [string]$More[$key] }
 
